@@ -1,0 +1,548 @@
+User Flow:
+
+Home
+ ↓
+Dashboard
+ ↓
+Start Interview
+
+ → Technical Questions
+ → Behavioral Questions
+
+ ↓
+Result Page
+ ↓
+Roadmap Button
+ ↓
+Roadmap Page
+
+
+
+import { useState, useEffect } from "react";
+import API from "../services/api";
+import { useNavigate, useParams } from "react-router-dom";
+import ScoreCard from "../Component/Score";
+
+const Interview = () => {
+  const { jobAnalysisId } = useParams();
+  const navigate = useNavigate();
+
+  const [interviewId, setInterviewId] = useState(null);
+  const [question, setQuestion] = useState(null);
+  const [nextQuestion, setNextQuestion] = useState(null);
+
+  const [answer, setAnswer] = useState("");
+  const [feedback, setFeedback] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [totalQuestions, setTotalQuestions] = useState(1);
+  const [currentSection, setCurrentSection] = useState("Technical");
+
+  const [progress, setProgress] = useState(0);
+  const [score, setScore] = useState(0);
+
+  const [showTrainer, setShowTrainer] = useState(false);
+  const [displayedText, setDisplayedText] = useState("");
+
+  // 🚀 START INTERVIEW
+  useEffect(() => {
+    if (jobAnalysisId) startInterview();
+  }, [jobAnalysisId]);
+
+  const startInterview = async () => {
+    try {
+      const res = await API.post("/interview/start", { jobAnalysisId });
+
+      setInterviewId(res.data.interviewId);
+      setQuestion(res.data.question);
+
+      setTotalQuestions(res.data.totalQuestions || 10);
+      setCurrentIndex(0);
+      setProgress(0);
+
+      setCurrentSection(
+        res.data.question?.type === "behavioral"
+          ? "Behavioral"
+          : "Technical"
+      );
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // ✨ Typing animation
+  useEffect(() => {
+    if (!question?.question) return;
+
+    setDisplayedText("");
+    let i = 0;
+
+    const interval = setInterval(() => {
+      setDisplayedText((prev) => prev + question.question[i]);
+      i++;
+
+      if (i >= question.question.length) {
+        clearInterval(interval);
+      }
+    }, 20);
+
+    return () => clearInterval(interval);
+  }, [question]);
+
+  // reset trainer on new question
+  useEffect(() => {
+    setShowTrainer(false);
+  }, [question]);
+
+  // 🎤 Voice input
+  const startListening = () => {
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert("Speech not supported");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+
+    recognition.onresult = (e) => {
+      setAnswer((prev) => prev + " " + e.results[0][0].transcript);
+    };
+
+    recognition.start();
+  };
+
+  // 🚀 SUBMIT ANSWER
+  const handleSubmit = async () => {
+    if (!interviewId || loading || feedback) return;
+
+    setLoading(true);
+
+    try {
+      await new Promise((res) => setTimeout(res, 400)); // prevent rapid calls
+
+      const res = await API.post("/interview/answer", {
+        interviewId,
+        answer: answer || "No answer provided",
+      });
+
+      // ✅ Interview finished
+      if (res.data.message === "Interview completed") {
+        navigate("/result", { state: res.data });
+        return;
+      }
+
+      setFeedback(res.data.feedback);
+      setShowTrainer(true);
+      setNextQuestion(res.data.nextQuestion);
+
+      // score update
+      setScore((prev) =>
+        Math.round((prev + (res.data.feedback?.score || 5) * 10) / 2)
+      );
+
+    } catch (err) {
+      console.error("SUBMIT ERROR:", err);
+
+      setFeedback({
+        score: 5,
+        feedback: "AI is busy. Your answer is saved. Continue.",
+      });
+    }
+
+    setLoading(false);
+  };
+
+  // 👉 NEXT QUESTION
+  const handleNext = () => {
+    if (!nextQuestion) return;
+
+    setQuestion(nextQuestion);
+    setNextQuestion(null);
+    setAnswer("");
+    setFeedback(null);
+    setShowTrainer(false);
+
+    setCurrentIndex((prev) => {
+      const newIndex = prev + 1;
+      setProgress(((newIndex + 1) / totalQuestions) * 100);
+      return newIndex;
+    });
+
+    if (nextQuestion.type === "behavioral") {
+      setCurrentSection("Behavioral");
+    }
+  };
+
+  if (!question) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white bg-[#0b0f17]">
+        Starting Interview...
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#0b0f17] text-white flex">
+
+      {/* SIDEBAR */}
+      <div className="w-64 bg-[#0f1623] p-6 border-r border-gray-800">
+        <h1 className="text-xl font-bold mb-6">IntervAI</h1>
+
+        <p className="text-gray-500 text-sm mb-3">SECTIONS</p>
+
+        <div className="space-y-3">
+          <div className={currentSection === "Technical" ? "text-red-400" : "text-gray-400"}>
+            Technical
+          </div>
+          <div className={currentSection === "Behavioral" ? "text-red-400" : "text-gray-400"}>
+            Behavioral
+          </div>
+        </div>
+      </div>
+
+      {/* MAIN */}
+      <div className="flex-1 p-8">
+
+        <h2 className="text-2xl font-bold mb-2">
+          {currentSection} Interview
+        </h2>
+
+        <p className="text-gray-400 text-sm mb-4">
+          Question {currentIndex + 1} of {totalQuestions}
+        </p>
+
+        {/* Question */}
+        <div className="bg-[#111827] p-6 rounded mb-6 min-h-[80px]">
+          {displayedText || "Loading question..."}
+        </div>
+
+        {/* Answer */}
+        <textarea
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          placeholder="Type your answer..."
+          className="w-full p-4 bg-[#0f172a] border border-gray-700 rounded mb-4"
+          rows={5}
+        />
+
+        <div className="flex gap-3">
+          <button
+            onClick={handleSubmit}
+            disabled={loading || feedback}
+            className="bg-red-500 px-6 py-2 rounded"
+          >
+            {loading ? "Evaluating..." : "Submit"}
+          </button>
+
+          <button
+            onClick={startListening}
+            className="bg-blue-500 px-4 py-2 rounded"
+          >
+            🎤 Speak
+          </button>
+        </div>
+
+        {/* Feedback */}
+        {feedback && (
+          <div className="mt-6 bg-[#111827] p-4 rounded">
+            <p className="text-green-400">
+              Score: {feedback.score || 5}/10
+            </p>
+            <p className="text-gray-300">{feedback.feedback}</p>
+          </div>
+        )}
+
+        {/* Trainer */}
+        {showTrainer && question && (
+          <div className="mt-4 bg-[#0f172a] p-4 rounded">
+            <p className="text-yellow-400 font-semibold">Intent</p>
+            <p className="text-gray-300 mb-2">{question.intent}</p>
+
+            <p className="text-green-400 font-semibold">Ideal Answer</p>
+            <p className="text-gray-300">{question.idealAnswer}</p>
+          </div>
+        )}
+
+        {/* Next Button */}
+        {nextQuestion && (
+          <button
+            onClick={handleNext}
+            className="mt-4 bg-blue-500 px-6 py-2 rounded"
+          >
+            Next Question →
+          </button>
+        )}
+      </div>
+
+      {/* RIGHT PANEL */}
+      <div className="w-80 p-6 border-l border-gray-800">
+        <ScoreCard score={score} />
+
+        <div className="mt-4">
+          <div className="w-full bg-gray-700 h-2 rounded">
+            <div
+              className="bg-green-500 h-2"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Interview;
+
+//------------------------------------------------------------------------
+import { useEffect, useState } from "react";
+import API from "../services/api";
+import { useNavigate, useParams } from "react-router-dom";
+
+const Interview = () => {
+  const { jobAnalysisId } = useParams();
+  const navigate = useNavigate();
+
+  const [interviewId, setInterviewId] = useState(null);
+  const [question, setQuestion] = useState(null);
+  const [nextQuestion, setNextQuestion] = useState(null);
+  const [answer, setAnswer] = useState("");
+  const [feedback, setFeedback] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (jobAnalysisId) startInterview();
+  }, [jobAnalysisId]);
+
+  const startInterview = async () => {
+    try {
+      const res = await API.post("/interview/start", { jobAnalysisId });
+      setInterviewId(res.data.interviewId);
+      setQuestion(res.data.question);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const submit = async () => {
+    if (!answer || loading) return;
+
+    setLoading(true);
+
+    try {
+      const res = await API.post("/interview/answer", {
+        interviewId,
+        answer,
+      });
+
+      // ✅ ONLY FINAL RESULT
+      if (res.data.message === "Interview completed") {
+        navigate("/result", {
+          state: res.data,
+        });
+        return;
+      }
+
+      setFeedback(res.data.feedback);
+      setNextQuestion(res.data.nextQuestion);
+
+    } catch (err) {
+      console.error(err);
+    }
+
+    setLoading(false);
+  };
+
+  const next = () => {
+    setQuestion(nextQuestion);
+    setNextQuestion(null);
+    setAnswer("");
+    setFeedback(null);
+  };
+
+  if (!question) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0b0f17] text-gray-400">
+        Preparing your interview...
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#0b0f17] to-[#020617] text-white flex items-center justify-center px-4">
+
+      <div className="w-full max-w-3xl">
+
+        <div className="text-center mb-6">
+          <h1 className="text-2xl font-bold">AI Interview</h1>
+          <p className="text-gray-400">
+            {question.type === "technical" ? "Technical Round" : "HR Round"}
+          </p>
+        </div>
+
+        <div className="bg-[#111827] p-6 rounded-xl border border-gray-800 mb-4">
+          <p className="text-sm text-gray-400 mb-2">
+            {question.type === "technical" ? "Technical Question" : "HR Question"}
+          </p>
+
+          <h2 className="text-lg">{question.question}</h2>
+        </div>
+
+        <textarea
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          className="w-full bg-[#020617] border border-gray-700 p-4 rounded mb-4"
+          rows={5}
+        />
+
+        <button
+          onClick={submit}
+          className="w-full bg-red-500 px-6 py-3 rounded"
+        >
+          {loading ? "Evaluating..." : "Submit Answer"}
+        </button>
+
+        {feedback && (
+          <div className="mt-4 bg-[#111827] p-4 rounded">
+            <p>Score: {feedback.score}/10</p>
+            <p>{feedback.feedback}</p>
+
+            <button
+              onClick={next}
+              className="mt-3 w-full bg-blue-500 px-4 py-2 rounded"
+            >
+              Next →
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Interview;
+//----------------------------------------------------------------------------
+import { useLocation, useNavigate } from "react-router-dom";
+
+const Result = () => {
+  const { state } = useLocation();
+  const navigate = useNavigate();
+
+  if (!state) {
+    return <div className="text-white p-10">No data found</div>;
+  }
+
+  const {
+    overallScore,
+    summary,
+    strengths,
+    weaknesses,
+    improvementTips,
+    jobAnalysisId,
+  } = state;
+
+  return (
+    <div className="min-h-screen bg-[#0b0f17] text-white flex items-center justify-center p-6">
+
+      <div className="w-full max-w-4xl">
+
+        <h1 className="text-3xl font-bold mb-6 text-center">
+          Interview Result
+        </h1>
+
+        <div className="bg-[#111827] p-6 rounded mb-6 text-center">
+          <h2 className="text-gray-400">Overall Score</h2>
+          <h1 className="text-5xl text-green-400 font-bold">
+            {overallScore}%
+          </h1>
+        </div>
+
+        <div className="bg-[#111827] p-4 rounded mb-4">
+          <h3 className="font-semibold mb-2">Summary</h3>
+          <p>{summary}</p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-4">
+
+          <div className="bg-[#111827] p-4 rounded">
+            <h3 className="text-green-400">Strengths</h3>
+            {strengths?.map((s, i) => <p key={i}>• {s}</p>)}
+          </div>
+
+          <div className="bg-[#111827] p-4 rounded">
+            <h3 className="text-red-400">Weaknesses</h3>
+            {weaknesses?.map((w, i) => <p key={i}>• {w}</p>)}
+          </div>
+
+          <div className="bg-[#111827] p-4 rounded">
+            <h3 className="text-yellow-400">Tips</h3>
+            {improvementTips?.map((t, i) => <p key={i}>• {t}</p>)}
+          </div>
+
+        </div>
+
+        <button
+          onClick={() => navigate(`/roadmap/${jobAnalysisId}`)}
+          className="mt-6 w-full bg-green-500 py-3 rounded"
+        >
+          View Roadmap →
+        </button>
+
+      </div>
+    </div>
+  );
+};
+
+export default Result;
+
+//-------------------------import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
+import API from "../services/api";
+
+const Roadmap = () => {
+  const { jobAnalysisId } = useParams();
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const res = await API.get(`/interview/${jobAnalysisId}`);
+      setData(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  if (!data) {
+    return <div className="text-white p-10">Loading...</div>;
+  }
+
+  return (
+    <div className="min-h-screen bg-[#0b0f17] text-white p-8">
+
+      <h1 className="text-2xl font-bold mb-6">Preparation Roadmap</h1>
+
+      {data.preparationPlan?.map((day, i) => (
+        <div key={i} className="bg-[#111827] p-5 rounded mb-4">
+          <h2 className="text-red-400">Day {day.day}</h2>
+          <p className="text-gray-400">{day.focus}</p>
+
+          <ul className="list-disc ml-5 mt-2">
+            {day.tasks.map((t, idx) => (
+              <li key={idx}>{t}</li>
+            ))}
+          </ul>
+        </div>
+      ))}
+
+    </div>
+  );
+};
+
+export default Roadmap;
