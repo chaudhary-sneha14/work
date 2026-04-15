@@ -4,10 +4,6 @@ import { Route, Routes } from 'react-router-dom'
 import Interview from './Pages/interview'
 import Result from './Pages/Result'
 import Roadmap from './Pages/RoadMap'
-// import TechResult from './Pages/Result'
-// import HrResult from './Pages/HrResult'
-// import Behavioral from './Pages/Behavioral'
-// import Interview from './Pages/interview.jsx'
 
 
 const App = () => {
