@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import API from "../services/api";
-import { useNavigate, useParams } from "react-router-dom";
+// import { useEffect, useState } from "react";
+// import API from "../services/api";
+// import { useNavigate, useParams } from "react-router-dom";
 
 // const Interview = () => {
 //   const { jobAnalysisId } = useParams();
