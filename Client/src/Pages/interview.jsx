@@ -1,7 +1,8 @@
 
 import { useState, useEffect } from "react";
-import API from "../services/api";
 import { useParams, useNavigate } from "react-router-dom";
+import API from "../services/api";
+
 
 const Interview = () => {
   const { jobAnalysisId } = useParams();
